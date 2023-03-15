@@ -1,5 +1,5 @@
 # isosurface-vase
-Create surfaces for printing in vase mode from scalar fields
+Use scalar fields to create surfaces for 3D printing in vase mode.
 
 For now, this project only generates this cylinder:
 
