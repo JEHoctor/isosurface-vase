@@ -6,17 +6,20 @@ import numpy.typing as npt
 import pyvista as pv
 import typer
 
+
 def vase_scalar_field(points: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Calculate values in a scalar field whose isosurface at zero defines the wall of a vase."""
     xy, z = points[:, :2], points[:, 2]
-    return -np.linalg.norm(xy, axis=1) + 4.0*((z >= 1) & (z <= 9))
+    return -np.linalg.norm(xy, axis=1) + 4.0 * ((z >= 1) & (z <= 9))
+
 
 def _conf_axis(resolution: float, length: float, center: bool) -> Tuple[float, float, float]:
     div = math.ceil(length / resolution)
     num = div + 1
-    start = (-length/2) if center else 0
+    start = (-length / 2) if center else 0
     step = length / div
     return num, step, start
+
 
 def build_grid(
     build_volume: Tuple[float, float, float],
@@ -40,6 +43,7 @@ def build_grid(
         origin=origin,
     )
 
+
 def main(out_file: str = "vase.stl") -> None:
     """Create a mesh for a printable vase and save as an stl."""
     grid = build_grid(
@@ -52,6 +56,7 @@ def main(out_file: str = "vase.stl") -> None:
     mesh = grid.contour([0], values, method="marching_cubes")
     # todo: decimate the mesh
     mesh.save(out_file)
+
 
 if __name__ == "__main__":
     typer.run(main)
