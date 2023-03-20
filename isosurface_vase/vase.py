@@ -1,6 +1,8 @@
+# standard libraries
 import math
 from typing import Tuple
 
+# third party libraries
 import numpy as np
 import numpy.typing as npt
 import pyvista as pv
