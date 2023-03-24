@@ -25,6 +25,7 @@ class ChunkedContour:
         grid_y: NDArrayF64,
         grid_z: NDArrayF64,
         scalar_field: Callable[[NDArrayF64], NDArrayF64],
+        max_chunk_points: int,
     ):
         """
         Initialize the ChunkedContour object.
@@ -34,22 +35,24 @@ class ChunkedContour:
             grid_y: The y values on which to sample the scalar field.
             grid_z: The z values on which to sample the scalar field.
             scalar_field: A function that takes a matrix of points and returns a vector of values.
+            max_chunk_points: Maximum number of points in one chunk.
         """
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.grid_z = grid_z
         self.scalar_field = scalar_field
+        self.max_chunk_points = max_chunk_points
 
     def _contour_chunk(self, x_slice: slice, y_slice: slice, z_slice: slice) -> Optional[pv.PolyData]:
         """Contour a chunk of the scalar field."""
         grid = pv.RectilinearGrid(self.grid_x[x_slice], self.grid_y[y_slice], self.grid_z[z_slice])
-        try:
-            points = grid.points
-            print(f"{points.shape=}")
-            values = self.scalar_field(points)
-        except (MemoryError, ValueError) as error:
-            print(f"Error contouring chunk: {error}")
+        num_points = grid.GetNumberOfPoints()
+        if num_points > self.max_chunk_points:
+            print(f"Chunk has too many points: {num_points}")
             return None
+        points = grid.points
+        print(f"{points.shape=}")
+        values = self.scalar_field(points)
         return grid.contour([0], values)
 
     def _split_array(self, length: int, chunks: int) -> Sequence[slice]:
@@ -82,7 +85,9 @@ class ChunkedContour:
             chunk_mesh = self._contour_chunk(x_slice, y_slice, z_slice)
             if chunk_mesh is None:
                 return None
-            mesh += chunk_mesh
+
+            if chunk_mesh.n_faces > 0:  # If the combined mesh has no vertices, some error checking code in pyvista will be activated.
+                mesh += chunk_mesh
         return mesh
 
     def _generate_chunking_strategies(self) -> Iterator[Tuple[int, int, int]]:
@@ -189,14 +194,14 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
     """Create a mesh for a printable vase and save as an stl."""
     grid = build_grid(
         build_volume=(10.0, 10.0, 10.0),
-        xy_resolution=0.05,
-        z_resolution=0.05,
-        extra_resolution_factor=10.0,
+        xy_resolution=0.1,
+        z_resolution=0.1,
+        extra_resolution_factor=4.0,
     )
 
     if how == "new":
         grid_x, grid_y, grid_z = convert_grid(grid)
-        cc = ChunkedContour(grid_x, grid_y, grid_z, vase_scalar_field)
+        cc = ChunkedContour(grid_x, grid_y, grid_z, vase_scalar_field, 10_000_000)
         mesh = cc.contour()
     elif how == "old":
         points = grid.points
