@@ -4,6 +4,7 @@ import math
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 # third party libraries
+import fast_simplification
 import numpy as np
 import numpy.typing as npt
 import pyvista as pv
@@ -202,7 +203,7 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
         build_volume=(10.0, 10.0, 10.0),
         xy_resolution=0.1,
         z_resolution=0.1,
-        extra_resolution_factor=4.0,
+        extra_resolution_factor=10.0,
     )
 
     if how == "new":
@@ -216,8 +217,8 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
         mesh = grid.contour([0], values, method="marching_cubes")
     else:
         raise ValueError(f"Invalid value for how: {how}")
-    # todo: decimate the mesh
-    mesh.save(out_file)
+    simplified_mesh = fast_simplification.simplify_mesh(mesh, target_reduction=0.9)
+    simplified_mesh.save(out_file)
 
 
 if __name__ == "__main__":

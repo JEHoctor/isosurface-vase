@@ -1,2 +1,3 @@
+fast-simplification~=0.1.0
 pyvista~=0.38.4
 typer~=0.7.0
