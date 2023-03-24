@@ -141,7 +141,8 @@ class ChunkedContour:
 def vase_scalar_field(points: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Calculate values in a scalar field whose isosurface at zero defines the wall of a vase."""
     xy, z = points[:, :2], points[:, 2]
-    return -np.linalg.norm(xy, axis=1) + 4.0 * ((z >= 1) & (z <= 9))
+    theta = np.arctan2(xy[:, 1], xy[:, 0])
+    return -np.linalg.norm(xy, axis=1) + (4.0 + 0.3 * np.sin(50 * theta + 15* np.sin(z) + 10 * z)) * ((z >= 1) & (z <= 9))
 
 
 def _conf_axis(resolution: float, length: float, center: bool) -> Tuple[float, float, float]:
@@ -173,6 +174,7 @@ def build_grid(
         spacing=spacing,
         origin=origin,
     )
+
 
 def convert_grid(grid: pv.UniformGrid) -> Tuple[NDArrayF64, NDArrayF64, NDArrayF64]:
     """Convert a grid to a tuple of 1D arrays."""
