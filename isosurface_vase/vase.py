@@ -1,6 +1,7 @@
 # standard libraries
 import itertools
 import math
+import multiprocessing
 from typing import Callable, Iterator, List, Optional, Sequence, Tuple
 
 # third party libraries
@@ -27,6 +28,7 @@ class ChunkedContour:
         grid_z: NDArrayF64,
         scalar_field: Callable[[NDArrayF64], NDArrayF64],
         max_chunk_points: int,
+        n_processes: int,
     ):
         """
         Initialize the ChunkedContour object.
@@ -37,12 +39,14 @@ class ChunkedContour:
             grid_z: The z values on which to sample the scalar field.
             scalar_field: A function that takes a matrix of points and returns a vector of values.
             max_chunk_points: Maximum number of points in one chunk.
+            n_processes: Number of processes to use for contouring.
         """
         self.grid_x = grid_x
         self.grid_y = grid_y
         self.grid_z = grid_z
         self.scalar_field = scalar_field
         self.max_chunk_points = max_chunk_points
+        self.n_processes = n_processes
 
     def _contour_chunk(self, x_slice: slice, y_slice: slice, z_slice: slice) -> Optional[pv.PolyData]:
         """Contour a chunk of the scalar field."""
@@ -52,7 +56,7 @@ class ChunkedContour:
             print(f"Chunk has too many points: {num_points}")
             return None
         points = grid.points
-        print(f"{points.shape=}")
+        print(f"contouring chunk: {x_slice=}, {y_slice=}, {z_slice=}, {points.shape=}")
         values = self.scalar_field(points)
         return grid.contour([0], values)
 
@@ -74,24 +78,40 @@ class ChunkedContour:
             low = high
         return slices
 
+    def _merge_meshes(self, meshes: List[pv.PolyData]) -> pv.PolyData:
+        """Merge meshes."""
+        return pv.PolyData().merge(meshes, progress_bar=True)
+
     def _contour_by_chunking(self, n_x_chunks: int, n_y_chunks: int, n_z_chunks: int) -> Optional[pv.PolyData]:
         """Contour multiple chunks and connect the results."""
         x_slices = self._split_array(len(self.grid_x), n_x_chunks)
         y_slices = self._split_array(len(self.grid_y), n_y_chunks)
         z_slices = self._split_array(len(self.grid_z), n_z_chunks)
 
-        mesh = pv.PolyData()
+        chunk_meshes: List[pv.PolyData] = []
         for x_slice, y_slice, z_slice in itertools.product(x_slices, y_slices, z_slices):
-            print(f"contouring chunk: {x_slice=}, {y_slice=}, {z_slice=}")
             chunk_mesh = self._contour_chunk(x_slice, y_slice, z_slice)
             if chunk_mesh is None:
                 return None
+            chunk_meshes.append(chunk_mesh)
+        return self._merge_meshes(chunk_meshes)
 
-            # If the chunk mesh has no vertices, merging it could cause some error checking code in pyvista to activate.
-            # If it has faces then it needs to be merged, and it definitely has vertices.
-            if chunk_mesh.n_faces > 0:
-                mesh += chunk_mesh
-        return mesh
+    def _contour_by_chunking_with_multiprocessing(
+        self, n_x_chunks: int, n_y_chunks: int, n_z_chunks: int
+    ) -> Optional[pv.PolyData]:
+        """Contour multiple chunks and connect the results using multiprocessing."""
+        x_slices = self._split_array(len(self.grid_x), n_x_chunks)
+        y_slices = self._split_array(len(self.grid_y), n_y_chunks)
+        z_slices = self._split_array(len(self.grid_z), n_z_chunks)
+
+        with multiprocessing.Pool(self.n_processes) as pool:
+            chunk_meshes = pool.starmap(self._contour_chunk, itertools.product(x_slices, y_slices, z_slices))
+        nn_chunk_meshes: List[pv.PolyData] = []
+        for chunk_mesh in chunk_meshes:
+            if chunk_mesh is None:
+                return None
+            nn_chunk_meshes.append(chunk_mesh)
+        return self._merge_meshes(nn_chunk_meshes)
 
     def _generate_chunking_strategies(self) -> Iterator[Tuple[int, int, int]]:
         """Generate chunking strategies."""
@@ -133,7 +153,10 @@ class ChunkedContour:
         """Contour the scalar field."""
         for chunking_strategy in self._generate_chunking_strategies():
             print(f"Trying chunking strategy: {chunking_strategy}")
-            mesh = self._contour_by_chunking(*chunking_strategy)
+            if self.n_processes == 1:
+                mesh = self._contour_by_chunking(*chunking_strategy)
+            else:
+                mesh = self._contour_by_chunking_with_multiprocessing(*chunking_strategy)
             if mesh is not None:
                 return mesh
         raise RuntimeError("Could not find a chunking strategy that fits in memory.")
@@ -201,14 +224,16 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
     """Create a mesh for a printable vase and save as an stl."""
     grid = build_grid(
         build_volume=(10.0, 10.0, 10.0),
-        xy_resolution=0.1,
-        z_resolution=0.1,
+        xy_resolution=0.05,
+        z_resolution=0.05,
         extra_resolution_factor=10.0,
     )
 
     if how == "new":
         grid_x, grid_y, grid_z = convert_grid(grid)
-        cc = ChunkedContour(grid_x, grid_y, grid_z, vase_scalar_field, 10_000_000)
+        cc = ChunkedContour(
+            grid_x, grid_y, grid_z, vase_scalar_field, 100_000_000, n_processes=multiprocessing.cpu_count()
+        )
         mesh = cc.contour()
     elif how == "old":
         points = grid.points
@@ -217,7 +242,9 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
         mesh = grid.contour([0], values, method="marching_cubes")
     else:
         raise ValueError(f"Invalid value for how: {how}")
-    simplified_mesh = fast_simplification.simplify_mesh(mesh, target_reduction=0.9)
+    print("Simplifying mesh now.")
+    simplified_mesh = fast_simplification.simplify_mesh(mesh, target_reduction=0.9, verbose=True)
+    print("Done simplifying the mesh.")
     simplified_mesh.save(out_file)
 
 
