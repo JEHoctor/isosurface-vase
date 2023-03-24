@@ -86,7 +86,9 @@ class ChunkedContour:
             if chunk_mesh is None:
                 return None
 
-            if chunk_mesh.n_faces > 0:  # If the combined mesh has no vertices, some error checking code in pyvista will be activated.
+            # If the chunk mesh has no vertices, merging it could cause some error checking code in pyvista to activate.
+            # If it has faces then it needs to be merged, and it definitely has vertices.
+            if chunk_mesh.n_faces > 0:
                 mesh += chunk_mesh
         return mesh
 
