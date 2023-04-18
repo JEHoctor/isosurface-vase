@@ -164,9 +164,13 @@ class ChunkedContour:
 
 def vase_scalar_field(points: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """Calculate values in a scalar field whose isosurface at zero defines the wall of a vase."""
-    xy, z = points[:, :2], points[:, 2]
-    theta = np.arctan2(xy[:, 1], xy[:, 0])
-    return -np.linalg.norm(xy, axis=1) + (4.0 + 0.3 * np.sin(50 * theta + 15 * np.sin(z) + 10 * z)) * (
+    x, y, xy, z = points[:, 0], points[:, 1], points[:, :2], points[:, 2]
+    theta = np.arctan2(y, x)
+    r = np.linalg.norm(xy, axis=1)
+    z_stretch = (z - 1) * 1.25
+    r_of_z = 2 * np.sin(-0.07 * z_stretch**2 + 0.9 * z_stretch + np.pi / 4 - 0.2) + 2.5
+    amplitude_factor_of_z = r_of_z / 5
+    return -r + (r_of_z + 0.3 * amplitude_factor_of_z * np.sin(50 * theta + 15 * np.sin(z) + 10 * z)) * (
         (z >= 1) & (z <= 9)
     )
 
@@ -232,7 +236,7 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
     if how == "new":
         grid_x, grid_y, grid_z = convert_grid(grid)
         cc = ChunkedContour(
-            grid_x, grid_y, grid_z, vase_scalar_field, 100_000_000, n_processes=multiprocessing.cpu_count()
+            grid_x, grid_y, grid_z, vase_scalar_field, 50_000_000, n_processes=multiprocessing.cpu_count()
         )
         mesh = cc.contour()
     elif how == "old":
