@@ -19,6 +19,9 @@ class ChunkedContour:
     A class for contouring a scalar field in chunks.
 
     This class is useful for contouring large scalar fields that do not fit in memory.
+
+    TODO: By surrounding the scalar field with negative infinity, we can close any holes in the
+    manifold at the edges of the sampled volume.
     """
 
     def __init__(
