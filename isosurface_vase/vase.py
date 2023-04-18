@@ -224,13 +224,14 @@ def convert_grid(grid: pv.UniformGrid) -> Tuple[NDArrayF64, NDArrayF64, NDArrayF
     )
 
 
-def main(out_file: str = "vase.stl", how: str = "new") -> None:
+def main(out_file: str = "vase.stl", how: str = "new", draft: bool = True) -> None:
     """Create a mesh for a printable vase and save as an stl."""
+    extra_resolution_factor = 1.0 if draft else 10.0
     grid = build_grid(
         build_volume=(10.0, 10.0, 10.0),
         xy_resolution=0.05,
         z_resolution=0.05,
-        extra_resolution_factor=10.0,
+        extra_resolution_factor=extra_resolution_factor,
     )
 
     if how == "new":
@@ -246,10 +247,14 @@ def main(out_file: str = "vase.stl", how: str = "new") -> None:
         mesh = grid.contour([0], values, method="marching_cubes")
     else:
         raise ValueError(f"Invalid value for how: {how}")
-    print("Simplifying mesh now.")
-    simplified_mesh = fast_simplification.simplify_mesh(mesh, target_reduction=0.9, verbose=True)
-    print("Done simplifying the mesh.")
-    simplified_mesh.save(out_file)
+
+    if not draft:
+        print("Simplifying mesh now.")
+        simplified_mesh = fast_simplification.simplify_mesh(mesh, target_reduction=0.9, verbose=True)
+        print("Done simplifying the mesh.")
+        simplified_mesh.save(out_file)
+    else:
+        mesh.save(out_file)
 
 
 if __name__ == "__main__":
