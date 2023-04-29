@@ -227,7 +227,7 @@ def convert_grid(grid: pv.UniformGrid) -> Tuple[NDArrayF64, NDArrayF64, NDArrayF
     )
 
 
-def main(out_file: str = "vase.stl", how: str = "new", draft: bool = True) -> None:
+def main(out_file: str = "vase.stl", draft: bool = True) -> None:
     """Create a mesh for a printable vase and save as an stl."""
     extra_resolution_factor = 1.0 if draft else 10.0
     grid = build_grid(
@@ -237,19 +237,11 @@ def main(out_file: str = "vase.stl", how: str = "new", draft: bool = True) -> No
         extra_resolution_factor=extra_resolution_factor,
     )
 
-    if how == "new":
-        grid_x, grid_y, grid_z = convert_grid(grid)
-        cc = ChunkedContour(
-            grid_x, grid_y, grid_z, vase_scalar_field, 50_000_000, n_processes=multiprocessing.cpu_count()
-        )
-        mesh = cc.contour()
-    elif how == "old":
-        points = grid.points
-        print(f"{points.shape=}")
-        values = vase_scalar_field(points)
-        mesh = grid.contour([0], values, method="marching_cubes")
-    else:
-        raise ValueError(f"Invalid value for how: {how}")
+    grid_x, grid_y, grid_z = convert_grid(grid)
+    cc = ChunkedContour(
+        grid_x, grid_y, grid_z, vase_scalar_field, 50_000_000, n_processes=multiprocessing.cpu_count()
+    )
+    mesh = cc.contour()
 
     if not draft:
         print("Simplifying mesh now.")
