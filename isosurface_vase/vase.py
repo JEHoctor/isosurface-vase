@@ -30,6 +30,7 @@ class ChunkedContour:
         grid_y: NDArrayF64,
         grid_z: NDArrayF64,
         scalar_field: Callable[[NDArrayF64], NDArrayF64],
+        *,
         max_chunk_points: int,
         n_processes: int,
     ):
@@ -178,68 +179,43 @@ def vase_scalar_field(points: npt.NDArray[np.float64]) -> npt.NDArray[np.float64
     )
 
 
-def _conf_axis(resolution: float, length: float, center: bool) -> Tuple[float, float, float]:
-    div = math.ceil(length / resolution)
-    num = div + 1
+def _linspace_axis(resolution: float, length: float, center: bool) -> NDArrayF64:
     start = (-length / 2) if center else 0
-    step = length / div
-    return num, step, start
+    stop = start + length
+    num = int(math.ceil(length / resolution)) + 1
+    return np.linspace(start, stop, num)
 
 
-def build_grid(
+def build_grid_axes(
     build_volume: Tuple[float, float, float],
     xy_resolution: float,
     z_resolution: float,
     extra_resolution_factor: float,
-) -> pv.UniformGrid:
+) -> Tuple[NDArrayF64, NDArrayF64, NDArrayF64]:
     """Build a grid from 3D printer specs."""
     xy_resolution /= extra_resolution_factor
     z_resolution /= extra_resolution_factor
 
-    dimensions, spacing, origin = zip(
-        _conf_axis(xy_resolution, build_volume[0], center=True),
-        _conf_axis(xy_resolution, build_volume[1], center=True),
-        _conf_axis(z_resolution, build_volume[2], center=False),
-    )
-
-    return pv.UniformGrid(
-        dimensions=dimensions,
-        spacing=spacing,
-        origin=origin,
-    )
-
-
-def convert_grid(grid: pv.UniformGrid) -> Tuple[NDArrayF64, NDArrayF64, NDArrayF64]:
-    """Convert a grid to a tuple of 1D arrays."""
-    # This code was borrowed from UniformGrid.points.
-    nx, ny, nz = grid.dimensions
-    nx -= 1
-    ny -= 1
-    nz -= 1
-    # get the points and convert to spacings
-    dx, dy, dz = grid.spacing
-    # Now make the cell arrays
-    ox, oy, oz = np.array(grid.origin) + np.array(grid.extent[::2])  # type: ignore
     return (
-        np.insert(np.cumsum(np.full(nx, dx)), 0, 0.0) + ox,
-        np.insert(np.cumsum(np.full(ny, dy)), 0, 0.0) + oy,
-        np.insert(np.cumsum(np.full(nz, dz)), 0, 0.0) + oz,
+        _linspace_axis(xy_resolution, build_volume[0], center=True),
+        _linspace_axis(xy_resolution, build_volume[1], center=True),
+        _linspace_axis(z_resolution, build_volume[2], center=False),
     )
 
 
 def main(out_file: str = "vase.stl", draft: bool = True) -> None:
     """Create a mesh for a printable vase and save as an stl."""
     extra_resolution_factor = 1.0 if draft else 10.0
-    grid = build_grid(
+
+    grid_x, grid_y, grid_z = build_grid_axes(
         build_volume=(10.0, 10.0, 10.0),
         xy_resolution=0.05,
         z_resolution=0.05,
         extra_resolution_factor=extra_resolution_factor,
     )
 
-    grid_x, grid_y, grid_z = convert_grid(grid)
     cc = ChunkedContour(
-        grid_x, grid_y, grid_z, vase_scalar_field, 50_000_000, n_processes=multiprocessing.cpu_count()
+        grid_x, grid_y, grid_z, vase_scalar_field, max_chunk_points=50_000_000, n_processes=multiprocessing.cpu_count()
     )
     mesh = cc.contour()
 
